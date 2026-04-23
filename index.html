@@ -221,9 +221,11 @@ function showList() {
 
     div.innerHTML = `
       <strong>${p.title}</strong><br>
+
       <div class="small">
-        ${(p.characters || []).map(c => c.name).join(", ")}<br>
-        ${p.updatedAt || ""}
+        👤 キャラ: ${(p.characters || []).map(c => c.name).join(", ")}<br>
+        🗓 作成: ${p.createdAt ? new Date(p.createdAt).toLocaleString() : "未記録"}<br>
+        🔄 更新: ${p.updatedAt ? new Date(p.updatedAt).toLocaleString() : ""}
       </div>
     `;
 
