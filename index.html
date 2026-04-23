@@ -71,7 +71,7 @@ textarea { height: 50vh; }
   <button onclick="addCharacter()">＋ キャラ追加</button>
 
   <h3>プロット</h3>
-  <textarea id="text" placeholder="ここにプロットを書く"></textarea>
+  <textarea id="text"></textarea>
 
   <button onclick="savePlot()">保存</button>
 </div>
@@ -84,6 +84,7 @@ textarea { height: 50vh; }
 
 <script>
 let currentIndex = null;
+let uid = null;
 
 /* =========================
    キャラ
@@ -121,25 +122,23 @@ function initCharacters(chars = []) {
   const list = document.getElementById("charList");
   list.innerHTML = "";
 
-  if (!chars || chars.length === 0) {
-    addCharacter("", "");
-    addCharacter("", "");
+  if (!chars.length) {
+    addCharacter();
+    addCharacter();
   } else {
     chars.forEach(c => addCharacter(c.name, c.note));
-    if (chars.length < 2) addCharacter("", "");
   }
 }
 
 function getCharacters() {
-  const rows = document.querySelectorAll("#charList > div");
-
-  return [...rows].map(row => {
-    const inputs = row.querySelectorAll("input");
-    return {
-      name: inputs[0].value.trim(),
-      note: inputs[1].value.trim()
-    };
-  }).filter(c => c.name);
+  return [...document.querySelectorAll("#charList > div")]
+    .map(row => {
+      const inputs = row.querySelectorAll("input");
+      return {
+        name: inputs[0].value.trim(),
+        note: inputs[1].value.trim()
+      };
+    }).filter(c => c.name);
 }
 
 /* =========================
@@ -164,19 +163,19 @@ function goHome() {
 }
 
 /* =========================
-   保存（ローカルのみ）
+   保存（Firestore同期）
 ========================= */
 
-function savePlot() {
+async function savePlot() {
+  if (!uid) return alert("ログインしてください");
+
   const title = document.getElementById("title").value;
   const text = document.getElementById("text").value;
 
-  if (!title || !text) {
-    alert("タイトルとプロットは必須です");
-    return;
-  }
+  if (!title || !text) return alert("必須項目です");
 
   let plots = JSON.parse(localStorage.getItem("plots") || "[]");
+
   const now = new Date().toLocaleString();
 
   const data = {
@@ -195,7 +194,31 @@ function savePlot() {
 
   localStorage.setItem("plots", JSON.stringify(plots));
 
-  alert("保存しました");
+  // 🔥 Firestore保存
+  await fb.setDoc(fb.doc(fb.db, "users", uid), {
+    data: plots,
+    updatedAt: new Date().toISOString()
+  });
+
+  alert("保存＆同期完了");
+}
+
+/* =========================
+   読み込み（重要）
+========================= */
+
+async function loadFromFirebase() {
+  if (!uid) return;
+
+  const snap = await fb.getDoc(fb.doc(fb.db, "users", uid));
+
+  if (snap.exists()) {
+    const data = snap.data().data;
+
+    if (Array.isArray(data)) {
+      localStorage.setItem("plots", JSON.stringify(data));
+    }
+  }
 }
 
 /* =========================
@@ -203,9 +226,6 @@ function savePlot() {
 ========================= */
 
 function showList() {
-  document.getElementById("home").classList.add("hidden");
-  document.getElementById("list").classList.remove("hidden");
-
   const items = document.getElementById("items");
   items.innerHTML = "";
 
@@ -218,8 +238,8 @@ function showList() {
     div.innerHTML = `
       <strong>${p.title}</strong><br>
       <div class="small">
-        キャラ: ${(p.characters || []).map(c => c.name).join(", ")}<br>
-        更新: ${p.updatedAt || ""}
+        ${(p.characters || []).map(c => c.name).join(", ")}<br>
+        ${p.updatedAt || ""}
       </div>
     `;
 
@@ -229,7 +249,6 @@ function showList() {
 
     const delBtn = document.createElement("button");
     delBtn.textContent = "削除";
-    delBtn.style.background = "#ffdddd";
     delBtn.onclick = () => deletePlot(i);
 
     div.appendChild(openBtn);
@@ -237,44 +256,54 @@ function showList() {
 
     items.appendChild(div);
   });
+
+  document.getElementById("home").classList.add("hidden");
+  document.getElementById("list").classList.remove("hidden");
 }
 
 /* =========================
    開く
 ========================= */
 
-function openPlot(index) {
+function openPlot(i) {
   const plots = JSON.parse(localStorage.getItem("plots") || "[]");
-  const p = plots[index];
+  const p = plots[i];
 
   document.getElementById("title").value = p.title;
   document.getElementById("text").value = p.text;
 
-  currentIndex = index;
+  currentIndex = i;
+
+  initCharacters(p.characters || []);
 
   document.getElementById("list").classList.add("hidden");
   document.getElementById("editor").classList.remove("hidden");
-
-  initCharacters(p.characters || []);
 }
 
 /* =========================
-   削除
+   削除（ローカル＋同期）
 ========================= */
 
-function deletePlot(index) {
+async function deletePlot(i) {
   let plots = JSON.parse(localStorage.getItem("plots") || "[]");
 
   if (!confirm("削除しますか？")) return;
 
-  plots.splice(index, 1);
+  plots.splice(i, 1);
   localStorage.setItem("plots", JSON.stringify(plots));
+
+  if (uid) {
+    await fb.setDoc(fb.doc(fb.db, "users", uid), {
+      data: plots,
+      updatedAt: new Date().toISOString()
+    });
+  }
 
   showList();
 }
 
 /* =========================
-   セリフ補助
+   セリフ補助（そのまま）
 ========================= */
 
 document.getElementById("text").addEventListener("keydown", function (e) {
@@ -296,7 +325,7 @@ document.getElementById("text").addEventListener("keydown", function (e) {
   const chars = getCharacters();
   const char = chars[num];
 
-  let insert = (char && char.name) ? char.name + "「」" : "「」";
+  let insert = char?.name ? char.name + "「」" : "「」";
 
   const newValue = before.slice(0, -1) + insert + after;
 
@@ -312,11 +341,11 @@ document.getElementById("text").addEventListener("keydown", function (e) {
 </script>
 
 <!-- =========================
- Firebase（無効化して安全版）
+ Firebase
 ========================= -->
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-app.js";
-import { getFirestore } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-firestore.js";
+import { getFirestore, doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-firestore.js";
 import {
   getAuth,
   GoogleAuthProvider,
@@ -334,33 +363,32 @@ const firebaseConfig = {
 };
 
 const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
 const auth = getAuth(app);
 const provider = new GoogleAuthProvider();
 
-window.auth = auth;
-window.provider = provider;
+window.fb = { db, doc, getDoc, setDoc };
 
-/* ログイン（安定版Popup） */
+/* ログイン */
 window.login = async function () {
-  try {
-    const result = await signInWithPopup(auth, provider);
-    window.uid = result.user.uid;
+  const res = await signInWithPopup(auth, provider);
+  uid = res.user.uid;
 
-    document.getElementById("userInfo").innerText =
-      "ログイン中: " + result.user.displayName;
+  document.getElementById("userInfo").innerText =
+    "ログイン中: " + res.user.displayName;
 
-  } catch (e) {
-    console.log(e);
-    alert("ログイン失敗（ポップアップ許可確認）");
-  }
+  await loadFromFirebase();
 };
 
-/* 状態監視 */
-onAuthStateChanged(auth, (user) => {
+/* ログイン状態監視（重要） */
+onAuthStateChanged(auth, async (user) => {
   if (user) {
-    window.uid = user.uid;
+    uid = user.uid;
+
     document.getElementById("userInfo").innerText =
       "ログイン中: " + user.displayName;
+
+    await loadFromFirebase();
   }
 });
 
