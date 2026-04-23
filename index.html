@@ -80,6 +80,24 @@ textarea { height: 50vh; }
 let uid = null;
 let editId = null;
 
+/* 🔥 データ移行（最重要） */
+function migrateData() {
+  let plots = JSON.parse(localStorage.getItem("plots") || "[]");
+  let changed = false;
+
+  plots = plots.map(p => {
+    if (!p.id) {
+      changed = true;
+      return { ...p, id: crypto.randomUUID() };
+    }
+    return p;
+  });
+
+  if (changed) {
+    localStorage.setItem("plots", JSON.stringify(plots));
+  }
+}
+
 /* キャラ */
 function addCharacter(name = "", note = "") {
   const div = document.createElement("div");
@@ -185,6 +203,7 @@ async function loadFromFirebase() {
   if (snap.exists()) {
     const data = snap.data().plots || [];
     localStorage.setItem("plots", JSON.stringify(data));
+    migrateData(); // 🔥ここ重要
   }
 }
 
@@ -198,6 +217,8 @@ function showList() {
   plots.sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
 
   plots.forEach(p => {
+    if (!p.id) return; // 🔥保険
+
     const div = document.createElement("div");
     div.className = "card";
 
@@ -205,8 +226,8 @@ function showList() {
       <strong>${p.title}</strong><br>
       <div class="small">
         ${(p.characters || []).map(c => c.name).join(", ")}<br>
-        作成: ${new Date(p.createdAt).toLocaleString()}<br>
-        更新: ${new Date(p.updatedAt).toLocaleString()}
+        作成: ${p.createdAt ? new Date(p.createdAt).toLocaleString() : "-"}<br>
+        更新: ${p.updatedAt ? new Date(p.updatedAt).toLocaleString() : "-"}
       </div>
     `;
 
@@ -233,6 +254,8 @@ function openPlot(id) {
   const plots = JSON.parse(localStorage.getItem("plots") || "[]");
   const p = plots.find(p => p.id === id);
 
+  if (!p) return alert("データが見つかりません");
+
   editId = id;
 
   document.getElementById("title").value = p.title;
@@ -246,6 +269,8 @@ function openPlot(id) {
 
 /* 削除 */
 async function deletePlot(id) {
+  if (!id) return alert("IDエラー");
+
   let plots = JSON.parse(localStorage.getItem("plots") || "[]");
 
   if (!confirm("削除しますか？")) return;
@@ -262,6 +287,10 @@ async function deletePlot(id) {
 
   showList();
 }
+
+/* 初期化 */
+window.addEventListener("load", migrateData);
+
 </script>
 
 <!-- Firebase -->
@@ -286,7 +315,6 @@ const provider = new GoogleAuthProvider();
 
 window.fb = { db, doc, getDoc, setDoc };
 
-/* ログイン（シンプル） */
 window.login = async () => {
   try {
     await signInWithPopup(auth, provider);
@@ -295,7 +323,6 @@ window.login = async () => {
   }
 };
 
-/* 状態監視（ここが本体） */
 onAuthStateChanged(auth, async (user) => {
   if (!user) return;
 
@@ -311,6 +338,7 @@ onAuthStateChanged(auth, async (user) => {
 
     const data = snap.data().plots || [];
     localStorage.setItem("plots", JSON.stringify(data));
+    migrateData(); // 🔥ここも重要
   });
 });
 </script>
