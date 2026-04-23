@@ -59,7 +59,7 @@ textarea {
   <button onclick="showList()">過去プロット</button>
 </div>
 
-<!-- 編集 -->
+<!-- 編集画面 -->
 <div id="editor" class="hidden">
   <button onclick="goHome()">← 戻る</button>
 
@@ -70,7 +70,7 @@ textarea {
   <button onclick="addCharacter()">＋ キャラ追加</button>
 
   <h3>プロット</h3>
-  <textarea id="text"></textarea>
+  <textarea id="text" placeholder="ここにプロットを書く"></textarea>
 
   <button onclick="savePlot()">保存</button>
 </div>
@@ -82,201 +82,246 @@ textarea {
   <div id="items"></div>
 </div>
 
-<!-- 通常スクリプト -->
 <script>
 
 let currentIndex = null;
 
-/* キャラ */
+/* =========================
+   キャラクター
+========================= */
+
 function addCharacter(name = "", note = "") {
-  const div = document.createElement("div");
+  const wrapper = document.createElement("div");
+  wrapper.style.display = "flex";
+  wrapper.style.gap = "5px";
+  wrapper.style.marginBottom = "5px";
 
-  const n = document.createElement("input");
-  n.value = name;
-  n.placeholder = "名前";
+  const nameInput = document.createElement("input");
+  nameInput.placeholder = "名前";
+  nameInput.value = name;
+  nameInput.style.width = "40%";
 
-  const t = document.createElement("input");
-  t.value = note;
-  t.placeholder = "補足";
+  const noteInput = document.createElement("input");
+  noteInput.placeholder = "補足";
+  noteInput.value = note;
+  noteInput.style.width = "50%";
 
-  const d = document.createElement("button");
-  d.textContent = "削除";
-  d.onclick = () => div.remove();
+  const del = document.createElement("button");
+  del.textContent = "削除";
+  del.style.width = "80px";
+  del.onclick = () => wrapper.remove();
 
-  div.appendChild(n);
-  div.appendChild(t);
-  div.appendChild(d);
+  wrapper.appendChild(nameInput);
+  wrapper.appendChild(noteInput);
+  wrapper.appendChild(del);
 
-  charList.appendChild(div);
+  document.getElementById("charList").appendChild(wrapper);
 }
 
-function initCharacters(chars=[]) {
-  charList.innerHTML="";
-  if (!chars.length) {
-    addCharacter(); addCharacter();
+function initCharacters(chars = []) {
+  const list = document.getElementById("charList");
+  list.innerHTML = "";
+
+  if (!chars || chars.length === 0) {
+    addCharacter("", "");
+    addCharacter("", "");
   } else {
-    chars.forEach(c=>addCharacter(c.name,c.note));
+    chars.forEach(c => addCharacter(c.name, c.note));
+    if (chars.length < 2) addCharacter("", "");
   }
 }
 
 function getCharacters() {
-  return [...charList.children].map(r=>{
-    const i=r.querySelectorAll("input");
-    return {name:i[0].value.trim(),note:i[1].value.trim()};
-  }).filter(c=>c.name);
+  const rows = document.querySelectorAll("#charList > div");
+
+  return [...rows].map(row => {
+    const inputs = row.querySelectorAll("input");
+
+    return {
+      name: inputs[0].value.trim(),
+      note: inputs[1].value.trim()
+    };
+  }).filter(c => c.name);
 }
 
-/* 画面 */
-function newPlot(){
-  home.classList.add("hidden");
-  editor.classList.remove("hidden");
-  title.value=""; text.value="";
-  currentIndex=null;
+/* =========================
+   画面操作
+========================= */
+
+function newPlot() {
+  document.getElementById("home").classList.add("hidden");
+  document.getElementById("editor").classList.remove("hidden");
+
+  document.getElementById("title").value = "";
+  document.getElementById("text").value = "";
+
+  currentIndex = null;
+
   initCharacters([]);
 }
 
-function goHome(){
-  editor.classList.add("hidden");
-  list.classList.add("hidden");
-  home.classList.remove("hidden");
+function goHome() {
+  document.getElementById("editor").classList.add("hidden");
+  document.getElementById("list").classList.add("hidden");
+  document.getElementById("home").classList.remove("hidden");
 }
 
-/* 保存 */
-function savePlot(){
-  if(!title.value||!text.value){
-    alert("必須です");return;
+/* =========================
+   保存
+========================= */
+
+function savePlot() {
+  const title = document.getElementById("title").value;
+  const text = document.getElementById("text").value;
+
+  if (!title || !text) {
+    alert("タイトルとプロットは必須です");
+    return;
   }
 
-  let plots=JSON.parse(localStorage.getItem("plots")||"[]");
+  let plots = JSON.parse(localStorage.getItem("plots") || "[]");
 
-  const data={
-    title:title.value,
-    text:text.value,
-    characters:getCharacters(),
-    updatedAt:new Date().toLocaleString()
+  const now = new Date().toLocaleString();
+
+  const data = {
+    title,
+    text,
+    characters: getCharacters(),
+    updatedAt: now
   };
 
-  if(currentIndex===null){
-    data.createdAt=data.updatedAt;
+  if (currentIndex === null) {
+    data.createdAt = now;
     plots.push(data);
-  }else{
-    plots[currentIndex]={...plots[currentIndex],...data};
+  } else {
+    plots[currentIndex] = { ...plots[currentIndex], ...data };
   }
 
-  localStorage.setItem("plots",JSON.stringify(plots));
-
-  // ★クラウド保存
-  if(window.saveToCloud) window.saveToCloud(plots);
+  localStorage.setItem("plots", JSON.stringify(plots));
 
   alert("保存しました");
 }
 
-/* 一覧 */
-function showList(){
-  home.classList.add("hidden");
-  list.classList.remove("hidden");
+/* =========================
+   一覧
+========================= */
 
-  items.innerHTML="";
-  const plots=JSON.parse(localStorage.getItem("plots")||"[]");
+function showList() {
+  document.getElementById("home").classList.add("hidden");
+  document.getElementById("list").classList.remove("hidden");
 
-  plots.forEach((p,i)=>{
-    const d=document.createElement("div");
-    d.className="card";
+  const items = document.getElementById("items");
+  items.innerHTML = "";
 
-    d.innerHTML=`<strong>${p.title}</strong><br>
-    <div class="small">${(p.characters||[]).map(c=>c.name).join(",")}</div>`;
+  const plots = JSON.parse(localStorage.getItem("plots") || "[]");
 
-    const o=document.createElement("button");
-    o.textContent="開く";
-    o.onclick=()=>openPlot(i);
+  plots.forEach((p, i) => {
+    const div = document.createElement("div");
+    div.className = "card";
 
-    const del=document.createElement("button");
-    del.textContent="削除";
-    del.onclick=()=>deletePlot(i);
+    div.innerHTML = `
+      <strong>${p.title}</strong><br>
 
-    d.appendChild(o); d.appendChild(del);
-    items.appendChild(d);
+      <div class="small">
+        キャラ: ${(p.characters || []).map(c => c.name).join(", ")}<br>
+        更新: ${p.updatedAt || ""}
+      </div>
+    `;
+
+    const openBtn = document.createElement("button");
+    openBtn.textContent = "開く";
+    openBtn.onclick = () => openPlot(i);
+
+    const delBtn = document.createElement("button");
+    delBtn.textContent = "削除";
+    delBtn.style.background = "#ffdddd";
+    delBtn.onclick = () => deletePlot(i);
+
+    div.appendChild(openBtn);
+    div.appendChild(delBtn);
+
+    items.appendChild(div);
   });
 }
 
-/* 開く */
-function openPlot(i){
-  const p=JSON.parse(localStorage.getItem("plots")||"[]")[i];
-  title.value=p.title;
-  text.value=p.text;
-  currentIndex=i;
+/* =========================
+   開く
+========================= */
 
-  list.classList.add("hidden");
-  editor.classList.remove("hidden");
+function openPlot(index) {
+  const plots = JSON.parse(localStorage.getItem("plots") || "[]");
+  const p = plots[index];
 
-  initCharacters(p.characters||[]);
+  document.getElementById("title").value = p.title;
+  document.getElementById("text").value = p.text;
+
+  currentIndex = index;
+
+  document.getElementById("list").classList.add("hidden");
+  document.getElementById("editor").classList.remove("hidden");
+
+  initCharacters(p.characters || []);
 }
 
-/* 削除 */
-function deletePlot(i){
-  let plots=JSON.parse(localStorage.getItem("plots")||"[]");
-  if(!confirm("削除?"))return;
-  plots.splice(i,1);
+/* =========================
+   削除
+========================= */
 
-  localStorage.setItem("plots",JSON.stringify(plots));
+function deletePlot(index) {
+  let plots = JSON.parse(localStorage.getItem("plots") || "[]");
 
-  if(window.saveToCloud) window.saveToCloud(plots);
+  if (!confirm("削除しますか？")) return;
+
+  plots.splice(index, 1);
+
+  localStorage.setItem("plots", JSON.stringify(plots));
 
   showList();
 }
 
-/* 起動時同期 */
-window.addEventListener("load", async ()=>{
-  if(!window.loadFromCloud) return;
-  const cloud=await window.loadFromCloud();
-  if(cloud?.length){
-    localStorage.setItem("plots",JSON.stringify(cloud));
-  }
-});
+document.getElementById("text").addEventListener("keydown", function (e) {
+  if (e.key !== "Enter") return;
 
-/* ショートカット */
-text.addEventListener("keydown",function(e){
-  if(e.key!=="Enter")return;
+  const value = this.value;
+  const pos = this.selectionStart;
 
-  const before=this.value.slice(0,this.selectionStart);
-  const last=before.split("\n").pop().trim();
+  const before = value.slice(0, pos);
+  const after = value.slice(pos);
 
-  if(!/^[１-９]$/.test(last))return;
+  const lastLine = before.split("\n").pop().trim();
+
+  // 全角数字チェック
+  if (!/^[１-９]$/.test(lastLine)) return;
 
   e.preventDefault();
 
-  const c=getCharacters()["１２３４５６７８９".indexOf(last)];
-  const insert=(c?.name||"")+"「」";
+  const num = "１２３４５６７８９".indexOf(lastLine);
 
-  this.value=before.slice(0,-1)+insert+this.value.slice(this.selectionStart);
+  // キャラ取得
+  const chars = getCharacters();
+  const char = chars[num];
 
-  const pos=before.length-1+insert.length-1;
-  setTimeout(()=>this.setSelectionRange(pos,pos),0);
+  let insert;
+
+  if (char && char.name) {
+    insert = char.name + "「」";
+  } else {
+    insert = "「」";
+  }
+
+  const newValue = before.slice(0, -1) + insert + after;
+
+  this.value = newValue;
+
+  const newPos = (before.length - 1) + insert.length - 1;
+
+  setTimeout(() => {
+    this.setSelectionRange(newPos, newPos);
+  }, 0);
 });
 
-</script>
 
-<!-- Firebase（別スクリプト） -->
-<script type="module">
-import { initializeApp } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-app.js";
-import { getFirestore, doc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-firestore.js";
 
-const app = initializeApp({
-  apiKey: "AIzaSyAEK7RHuthKhJLXbgQX02ecRqEStf9fn3o",
-  authDomain: "comicplot-c793e.firebaseapp.com",
-  projectId: "comicplot-c793e"
-});
-
-const db = getFirestore(app);
-
-window.saveToCloud = async (data)=>{
-  await setDoc(doc(db,"plots","main"),{data});
-};
-
-window.loadFromCloud = async ()=>{
-  const s=await getDoc(doc(db,"plots","main"));
-  return s.exists()?s.data().data:[];
-};
 </script>
 
 </body>
