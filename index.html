@@ -7,10 +7,7 @@
 <title>プロットアプリ</title>
 
 <style>
-
-html, body {
-  overflow-x: hidden;
-}
+html, body { overflow-x: hidden; }
 
 body {
   font-family: sans-serif;
@@ -34,9 +31,7 @@ button {
   border-radius: 8px;
 }
 
-textarea {
-  height: 50vh;
-}
+textarea { height: 50vh; }
 
 .card {
   border: 1px solid #ccc;
@@ -50,10 +45,7 @@ textarea {
   color: #666;
 }
 
-.hidden {
-  display: none;
-}
-
+.hidden { display: none; }
 </style>
 </head>
 
@@ -61,6 +53,10 @@ textarea {
 
 <div id="home">
   <h2>プロットアプリ</h2>
+
+  <button onclick="login()">Googleログイン</button>
+  <div id="userInfo" class="small"></div>
+
   <button onclick="newPlot()">新規作成</button>
   <button onclick="showList()">過去プロット</button>
 </div>
@@ -87,7 +83,6 @@ textarea {
 </div>
 
 <script>
-
 let currentIndex = null;
 
 /* =========================
@@ -169,7 +164,7 @@ function goHome() {
 }
 
 /* =========================
-   保存
+   保存（Firebase同期）
 ========================= */
 
 async function savePlot() {
@@ -202,14 +197,12 @@ async function savePlot() {
 
   alert("保存しました");
 
-  /* =========================
-     Firebase同期（安全版）
-  ========================= */
-  if (window.firebaseReady && window.fb) {
+  /* Firebase同期 */
+  if (window.firebaseReady && window.fb && window.uid) {
     fb.setDoc(
-      fb.doc(fb.db, "plots", "default"),
+      fb.doc(fb.db, "users", window.uid),
       {
-        data: JSON.parse(localStorage.getItem("plots") || "[]"),
+        data: plots,
         updatedAt: now
       }
     );
@@ -330,11 +323,13 @@ document.getElementById("text").addEventListener("keydown", function (e) {
 </script>
 
 <!-- =========================
-     Firebase（初期化）
+     Firebase
 ========================= -->
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-app.js";
 import { getFirestore, doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-firestore.js";
+import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged }
+from "https://www.gstatic.com/firebasejs/12.12.1/firebase-auth.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyAEK7RHuthKhJLXbgQX02ecRqEStf9fn3o",
@@ -347,13 +342,40 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
+const auth = getAuth(app);
+const provider = new GoogleAuthProvider();
 
 window.fb = { db, doc, getDoc, setDoc };
-window.firebaseReady = false;
+window.auth = auth;
+window.provider = provider;
 
-/* 起動時同期 */
+window.firebaseReady = false;
+window.uid = null;
+
+/* ログイン */
+window.login = async function () {
+  const result = await signInWithPopup(auth, provider);
+  const user = result.user;
+
+  window.uid = user.uid;
+  document.getElementById("userInfo").innerText =
+    "ログイン中: " + user.displayName;
+};
+
+/* 状態監視 */
+onAuthStateChanged(auth, (user) => {
+  if (user) {
+    window.uid = user.uid;
+    document.getElementById("userInfo").innerText =
+      "ログイン中: " + user.displayName;
+  }
+});
+
+/* 読み込み */
 async function loadFromFirebase() {
-  const snap = await fb.getDoc(fb.doc(fb.db, "plots", "default"));
+  if (!window.uid) return;
+
+  const snap = await fb.getDoc(fb.doc(fb.db, "users", window.uid));
 
   if (snap.exists()) {
     const data = snap.data().data;
@@ -363,9 +385,12 @@ async function loadFromFirebase() {
   }
 }
 
+/* 起動 */
 window.addEventListener("load", async () => {
-  await loadFromFirebase();
-  window.firebaseReady = true;
+  setTimeout(async () => {
+    await loadFromFirebase();
+    window.firebaseReady = true;
+  }, 1500);
 });
 
 </script>
