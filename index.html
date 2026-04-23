@@ -164,10 +164,10 @@ function goHome() {
 }
 
 /* =========================
-   保存
+   保存（ローカルのみ）
 ========================= */
 
-async function savePlot() {
+function savePlot() {
   const title = document.getElementById("title").value;
   const text = document.getElementById("text").value;
 
@@ -177,7 +177,7 @@ async function savePlot() {
   }
 
   let plots = JSON.parse(localStorage.getItem("plots") || "[]");
-  const now = new Date().toISOString();
+  const now = new Date().toLocaleString();
 
   const data = {
     title,
@@ -196,17 +196,6 @@ async function savePlot() {
   localStorage.setItem("plots", JSON.stringify(plots));
 
   alert("保存しました");
-
-  /* Firebase同期 */
-  if (window.uid && window.fb) {
-    await fb.setDoc(
-      fb.doc(fb.db, "users", window.uid),
-      {
-        data: plots,
-        updatedAt: now
-      }
-    );
-  }
 }
 
 /* =========================
@@ -323,16 +312,15 @@ document.getElementById("text").addEventListener("keydown", function (e) {
 </script>
 
 <!-- =========================
- Firebase（安定版 redirectログイン）
+ Firebase（無効化して安全版）
 ========================= -->
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-app.js";
-import { getFirestore, doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-firestore.js";
+import { getFirestore } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-firestore.js";
 import {
   getAuth,
   GoogleAuthProvider,
-  signInWithRedirect,
-  getRedirectResult,
+  signInWithPopup,
   onAuthStateChanged
 } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-auth.js";
 
@@ -346,25 +334,26 @@ const firebaseConfig = {
 };
 
 const app = initializeApp(firebaseConfig);
-const db = getFirestore(app);
 const auth = getAuth(app);
 const provider = new GoogleAuthProvider();
 
-window.fb = { db, doc, getDoc, setDoc };
+window.auth = auth;
+window.provider = provider;
 
-/* ログイン（安定版） */
-window.login = function () {
-  signInWithRedirect(auth, provider);
-};
-
-/* リダイレクト結果 */
-getRedirectResult(auth).then((result) => {
-  if (result && result.user) {
+/* ログイン（安定版Popup） */
+window.login = async function () {
+  try {
+    const result = await signInWithPopup(auth, provider);
     window.uid = result.user.uid;
+
     document.getElementById("userInfo").innerText =
       "ログイン中: " + result.user.displayName;
+
+  } catch (e) {
+    console.log(e);
+    alert("ログイン失敗（ポップアップ許可確認）");
   }
-});
+};
 
 /* 状態監視 */
 onAuthStateChanged(auth, (user) => {
@@ -373,27 +362,6 @@ onAuthStateChanged(auth, (user) => {
     document.getElementById("userInfo").innerText =
       "ログイン中: " + user.displayName;
   }
-});
-
-/* 読み込み */
-async function loadFromFirebase() {
-  if (!window.uid) return;
-
-  const snap = await fb.getDoc(fb.doc(fb.db, "users", window.uid));
-
-  if (snap.exists()) {
-    const data = snap.data().data;
-    if (Array.isArray(data)) {
-      localStorage.setItem("plots", JSON.stringify(data));
-    }
-  }
-}
-
-/* 起動時 */
-window.addEventListener("load", async () => {
-  setTimeout(async () => {
-    await loadFromFirebase();
-  }, 1000);
 });
 
 </script>
