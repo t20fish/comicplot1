@@ -164,7 +164,7 @@ function goHome() {
 }
 
 /* =========================
-   保存（Firebase同期）
+   保存
 ========================= */
 
 async function savePlot() {
@@ -198,8 +198,8 @@ async function savePlot() {
   alert("保存しました");
 
   /* Firebase同期 */
-  if (window.firebaseReady && window.fb && window.uid) {
-    fb.setDoc(
+  if (window.uid && window.fb) {
+    await fb.setDoc(
       fb.doc(fb.db, "users", window.uid),
       {
         data: plots,
@@ -323,13 +323,18 @@ document.getElementById("text").addEventListener("keydown", function (e) {
 </script>
 
 <!-- =========================
-     Firebase
+ Firebase（安定版 redirectログイン）
 ========================= -->
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-app.js";
 import { getFirestore, doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-firestore.js";
-import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged }
-from "https://www.gstatic.com/firebasejs/12.12.1/firebase-auth.js";
+import {
+  getAuth,
+  GoogleAuthProvider,
+  signInWithRedirect,
+  getRedirectResult,
+  onAuthStateChanged
+} from "https://www.gstatic.com/firebasejs/12.12.1/firebase-auth.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyAEK7RHuthKhJLXbgQX02ecRqEStf9fn3o",
@@ -346,21 +351,20 @@ const auth = getAuth(app);
 const provider = new GoogleAuthProvider();
 
 window.fb = { db, doc, getDoc, setDoc };
-window.auth = auth;
-window.provider = provider;
 
-window.firebaseReady = false;
-window.uid = null;
-
-/* ログイン */
-window.login = async function () {
-  const result = await signInWithPopup(auth, provider);
-  const user = result.user;
-
-  window.uid = user.uid;
-  document.getElementById("userInfo").innerText =
-    "ログイン中: " + user.displayName;
+/* ログイン（安定版） */
+window.login = function () {
+  signInWithRedirect(auth, provider);
 };
+
+/* リダイレクト結果 */
+getRedirectResult(auth).then((result) => {
+  if (result && result.user) {
+    window.uid = result.user.uid;
+    document.getElementById("userInfo").innerText =
+      "ログイン中: " + result.user.displayName;
+  }
+});
 
 /* 状態監視 */
 onAuthStateChanged(auth, (user) => {
@@ -385,12 +389,11 @@ async function loadFromFirebase() {
   }
 }
 
-/* 起動 */
+/* 起動時 */
 window.addEventListener("load", async () => {
   setTimeout(async () => {
     await loadFromFirebase();
-    window.firebaseReady = true;
-  }, 1500);
+  }, 1000);
 });
 
 </script>
