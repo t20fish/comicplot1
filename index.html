@@ -389,6 +389,20 @@ onAuthStateChanged(auth, async (user) => {
       "ログイン中: " + user.displayName;
 
     await loadFromFirebase();
+
+    // 🔥リアルタイム同期ここ
+    onSnapshot(doc(db, "users", uid), (snap) => {
+      if (snap.exists()) {
+        const data = snap.data().data;
+
+        localStorage.setItem("plots", JSON.stringify(data));
+
+        // 画面更新（今開いてる画面に応じて）
+        if (!document.getElementById("list").classList.contains("hidden")) {
+          showList();
+        }
+      }
+    });
   }
 });
 
