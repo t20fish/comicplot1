@@ -177,6 +177,7 @@ async function savePlot() {
     data.createdAt = now;
     plots.push(data);
   } else {
+    data.createdAt = plots[editIndex].createdAt; // ←これ追加
     plots[editIndex] = data;
   }
 
