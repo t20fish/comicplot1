@@ -20,7 +20,10 @@ body {
 
 textarea, input {
   width: 100%;
+  font-size: 18px;
+  margin-bottom: 10px;
   padding: 10px;
+  border-radius: 6px;
 }
 
 button {
@@ -29,14 +32,6 @@ button {
   margin: 6px 0;
   font-size: 18px;
   border-radius: 8px;
-}
-
-textarea, input {
-  width: 100%;
-  font-size: 18px;
-  margin-bottom: 10px;
-  padding: 10px;
-  border-radius: 6px;
 }
 
 textarea {
@@ -58,19 +53,18 @@ textarea {
 .hidden {
   display: none;
 }
+
 </style>
 </head>
 
 <body>
 
-<!-- ホーム -->
 <div id="home">
   <h2>プロットアプリ</h2>
   <button onclick="newPlot()">新規作成</button>
   <button onclick="showList()">過去プロット</button>
 </div>
 
-<!-- 編集画面 -->
 <div id="editor" class="hidden">
   <button onclick="goHome()">← 戻る</button>
 
@@ -86,7 +80,6 @@ textarea {
   <button onclick="savePlot()">保存</button>
 </div>
 
-<!-- 一覧 -->
 <div id="list" class="hidden">
   <button onclick="goHome()">← 戻る</button>
   <h3>過去プロット</h3>
@@ -98,7 +91,7 @@ textarea {
 let currentIndex = null;
 
 /* =========================
-   キャラクター
+   キャラ
 ========================= */
 
 function addCharacter(name = "", note = "") {
@@ -147,7 +140,6 @@ function getCharacters() {
 
   return [...rows].map(row => {
     const inputs = row.querySelectorAll("input");
-
     return {
       name: inputs[0].value.trim(),
       note: inputs[1].value.trim()
@@ -156,7 +148,7 @@ function getCharacters() {
 }
 
 /* =========================
-   画面操作
+   画面
 ========================= */
 
 function newPlot() {
@@ -167,7 +159,6 @@ function newPlot() {
   document.getElementById("text").value = "";
 
   currentIndex = null;
-
   initCharacters([]);
 }
 
@@ -181,7 +172,7 @@ function goHome() {
    保存
 ========================= */
 
-function savePlot() {
+async function savePlot() {
   const title = document.getElementById("title").value;
   const text = document.getElementById("text").value;
 
@@ -191,8 +182,7 @@ function savePlot() {
   }
 
   let plots = JSON.parse(localStorage.getItem("plots") || "[]");
-
-  const now = new Date().toLocaleString();
+  const now = new Date().toISOString();
 
   const data = {
     title,
@@ -211,6 +201,19 @@ function savePlot() {
   localStorage.setItem("plots", JSON.stringify(plots));
 
   alert("保存しました");
+
+  /* =========================
+     Firebase同期（安全版）
+  ========================= */
+  if (window.firebaseReady && window.fb) {
+    fb.setDoc(
+      fb.doc(fb.db, "plots", "default"),
+      {
+        data: JSON.parse(localStorage.getItem("plots") || "[]"),
+        updatedAt: now
+      }
+    );
+  }
 }
 
 /* =========================
@@ -232,7 +235,6 @@ function showList() {
 
     div.innerHTML = `
       <strong>${p.title}</strong><br>
-
       <div class="small">
         キャラ: ${(p.characters || []).map(c => c.name).join(", ")}<br>
         更新: ${p.updatedAt || ""}
@@ -284,11 +286,14 @@ function deletePlot(index) {
   if (!confirm("削除しますか？")) return;
 
   plots.splice(index, 1);
-
   localStorage.setItem("plots", JSON.stringify(plots));
 
   showList();
 }
+
+/* =========================
+   セリフ補助
+========================= */
 
 document.getElementById("text").addEventListener("keydown", function (e) {
   if (e.key !== "Enter") return;
@@ -301,24 +306,15 @@ document.getElementById("text").addEventListener("keydown", function (e) {
 
   const lastLine = before.split("\n").pop().trim();
 
-  // 全角数字チェック
   if (!/^[１-９]$/.test(lastLine)) return;
 
   e.preventDefault();
 
   const num = "１２３４５６７８９".indexOf(lastLine);
-
-  // キャラ取得
   const chars = getCharacters();
   const char = chars[num];
 
-  let insert;
-
-  if (char && char.name) {
-    insert = char.name + "「」";
-  } else {
-    insert = "「」";
-  }
+  let insert = (char && char.name) ? char.name + "「」" : "「」";
 
   const newValue = before.slice(0, -1) + insert + after;
 
@@ -331,7 +327,46 @@ document.getElementById("text").addEventListener("keydown", function (e) {
   }, 0);
 });
 
+</script>
 
+<!-- =========================
+     Firebase（初期化）
+========================= -->
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-app.js";
+import { getFirestore, doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyAEK7RHuthKhJLXbgQX02ecRqEStf9fn3o",
+  authDomain: "comicplot-c793e.firebaseapp.com",
+  projectId: "comicplot-c793e",
+  storageBucket: "comicplot-c793e.appspot.com",
+  messagingSenderId: "533792573192",
+  appId: "1:533792573192:web:d262cf785b0877df4d0ebd"
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+
+window.fb = { db, doc, getDoc, setDoc };
+window.firebaseReady = false;
+
+/* 起動時同期 */
+async function loadFromFirebase() {
+  const snap = await fb.getDoc(fb.doc(fb.db, "plots", "default"));
+
+  if (snap.exists()) {
+    const data = snap.data().data;
+    if (Array.isArray(data)) {
+      localStorage.setItem("plots", JSON.stringify(data));
+    }
+  }
+}
+
+window.addEventListener("load", async () => {
+  await loadFromFirebase();
+  window.firebaseReady = true;
+});
 
 </script>
 
