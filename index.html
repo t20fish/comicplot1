@@ -84,7 +84,7 @@ textarea { height: 50vh; }
 
 <script>
 let uid = null;
-let currentIndex = null;
+let editIndex = null;
 
 /* =========================
    キャラ
@@ -132,13 +132,14 @@ function getCharacters() {
 ========================= */
 
 function newPlot() {
+  editIndex = null;
+
   document.getElementById("home").classList.add("hidden");
   document.getElementById("editor").classList.remove("hidden");
 
   document.getElementById("title").value = "";
   document.getElementById("text").value = "";
 
-  currentIndex = null;
   initCharacters([]);
 }
 
@@ -149,7 +150,7 @@ function goHome() {
 }
 
 /* =========================
-   保存
+   保存（新規 / 上書き）
 ========================= */
 
 async function savePlot() {
@@ -171,11 +172,12 @@ async function savePlot() {
     updatedAt: now
   };
 
-  if (currentIndex === null) {
+  // 🔥 新規 or 上書き判定
+  if (editIndex === null) {
     data.createdAt = now;
     plots.push(data);
   } else {
-    plots[currentIndex] = data;
+    plots[editIndex] = data;
   }
 
   localStorage.setItem("plots", JSON.stringify(plots));
@@ -185,7 +187,7 @@ async function savePlot() {
     updatedAt: now
   });
 
-  alert("保存＆同期完了");
+  alert(editIndex === null ? "新規保存しました" : "上書き保存しました");
 }
 
 /* =========================
@@ -244,17 +246,17 @@ function showList() {
 }
 
 /* =========================
-   開く
+   開く（編集モード）
 ========================= */
 
 function openPlot(i) {
   const plots = JSON.parse(localStorage.getItem("plots") || "[]");
   const p = plots[i];
 
+  editIndex = i;
+
   document.getElementById("title").value = p.title;
   document.getElementById("text").value = p.text;
-
-  currentIndex = i;
 
   initCharacters(p.characters || []);
 
@@ -272,7 +274,6 @@ async function deletePlot(i) {
   if (!confirm("削除しますか？")) return;
 
   plots.splice(i, 1);
-
   localStorage.setItem("plots", JSON.stringify(plots));
 
   if (uid) {
@@ -284,41 +285,6 @@ async function deletePlot(i) {
 
   showList();
 }
-
-/* =========================
-   セリフ補助
-========================= */
-
-document.getElementById("text").addEventListener("keydown", function (e) {
-  if (e.key !== "Enter") return;
-
-  const value = this.value;
-  const pos = this.selectionStart;
-
-  const before = value.slice(0, pos);
-  const after = value.slice(pos);
-
-  const last = before.split("\n").pop().trim();
-
-  if (!/^[１-９]$/.test(last)) return;
-
-  e.preventDefault();
-
-  const num = "１２３４５６７８９".indexOf(last);
-  const chars = getCharacters();
-  const c = chars[num];
-
-  const insert = c?.name ? c.name + "「」" : "「」";
-
-  this.value = before.slice(0, -1) + insert + after;
-
-  setTimeout(() => {
-    this.setSelectionRange(
-      before.length - 1 + insert.length - 1,
-      before.length - 1 + insert.length - 1
-    );
-  }, 0);
-});
 </script>
 
 <!-- =========================
@@ -326,9 +292,8 @@ document.getElementById("text").addEventListener("keydown", function (e) {
 ========================= -->
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-app.js";
-import { getFirestore, doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-firestore.js";
+import { getFirestore, doc, getDoc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-firestore.js";
 import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-auth.js";
-import { onSnapshot } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-firestore.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyAEK7RHuthKhJLXbgQX02ecRqEStf9fn3o",
@@ -357,7 +322,7 @@ window.login = async () => {
   await loadFromFirebase();
 };
 
-/* auth監視 */
+/* auth監視 + リアルタイム同期 */
 onAuthStateChanged(auth, async (user) => {
   if (!user) return;
 
