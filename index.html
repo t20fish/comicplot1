@@ -3,7 +3,6 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-
 <title>プロットアプリ</title>
 
 <style>
@@ -40,11 +39,7 @@ textarea { height: 50vh; }
   border-radius: 8px;
 }
 
-.small {
-  font-size: 12px;
-  color: #666;
-}
-
+.small { font-size: 12px; color: #666; }
 .hidden { display: none; }
 </style>
 </head>
@@ -53,7 +48,6 @@ textarea { height: 50vh; }
 
 <div id="home">
   <h2>プロットアプリ</h2>
-
   <button onclick="login()">Googleログイン</button>
   <div id="userInfo" class="small"></div>
 
@@ -156,7 +150,6 @@ async function savePlot() {
   const now = new Date().toISOString();
 
   if (editId === null) {
-    // 新規
     plots.push({
       id: crypto.randomUUID(),
       title,
@@ -166,16 +159,9 @@ async function savePlot() {
       updatedAt: now
     });
   } else {
-    // 上書き
     plots = plots.map(p =>
       p.id === editId
-        ? {
-            ...p,
-            title,
-            text,
-            characters: getCharacters(),
-            updatedAt: now
-          }
+        ? { ...p, title, text, characters: getCharacters(), updatedAt: now }
         : p
     );
   }
@@ -209,7 +195,6 @@ function showList() {
 
   let plots = JSON.parse(localStorage.getItem("plots") || "[]");
 
-  // 更新順
   plots.sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
 
   plots.forEach(p => {
@@ -220,8 +205,8 @@ function showList() {
       <strong>${p.title}</strong><br>
       <div class="small">
         ${(p.characters || []).map(c => c.name).join(", ")}<br>
-        作成: ${p.createdAt ? new Date(p.createdAt).toLocaleString() : ""}<br>
-        更新: ${p.updatedAt ? new Date(p.updatedAt).toLocaleString() : ""}
+        作成: ${new Date(p.createdAt).toLocaleString()}<br>
+        更新: ${new Date(p.updatedAt).toLocaleString()}
       </div>
     `;
 
@@ -266,7 +251,6 @@ async function deletePlot(id) {
   if (!confirm("削除しますか？")) return;
 
   plots = plots.filter(p => p.id !== id);
-
   localStorage.setItem("plots", JSON.stringify(plots));
 
   if (uid) {
@@ -302,17 +286,23 @@ const provider = new GoogleAuthProvider();
 
 window.fb = { db, doc, getDoc, setDoc };
 
-/* login */
+/* ログイン（シンプル） */
 window.login = async () => {
-  const res = await signInWithPopup(auth, provider);
-  uid = res.user.uid;
+  try {
+    await signInWithPopup(auth, provider);
+  } catch (e) {
+    alert("ログイン失敗: " + e.message);
+  }
 };
 
-/* auth監視 */
+/* 状態監視（ここが本体） */
 onAuthStateChanged(auth, async (user) => {
   if (!user) return;
 
   uid = user.uid;
+
+  document.getElementById("userInfo").innerText =
+    "ログイン中: " + user.displayName;
 
   await loadFromFirebase();
 
