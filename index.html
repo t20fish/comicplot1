@@ -83,44 +83,29 @@ textarea { height: 50vh; }
 </div>
 
 <script>
-let currentIndex = null;
 let uid = null;
+let currentIndex = null;
 
 /* =========================
    キャラ
 ========================= */
 
 function addCharacter(name = "", note = "") {
-  const wrapper = document.createElement("div");
-  wrapper.style.display = "flex";
-  wrapper.style.gap = "5px";
-  wrapper.style.marginBottom = "5px";
+  const div = document.createElement("div");
+  div.style.display = "flex";
+  div.style.gap = "5px";
 
-  const nameInput = document.createElement("input");
-  nameInput.placeholder = "名前";
-  nameInput.value = name;
-  nameInput.style.width = "40%";
+  div.innerHTML = `
+    <input placeholder="名前" value="${name}" style="width:40%">
+    <input placeholder="補足" value="${note}" style="width:50%">
+    <button onclick="this.parentElement.remove()" style="width:80px">削除</button>
+  `;
 
-  const noteInput = document.createElement("input");
-  noteInput.placeholder = "補足";
-  noteInput.value = note;
-  noteInput.style.width = "50%";
-
-  const del = document.createElement("button");
-  del.textContent = "削除";
-  del.style.width = "80px";
-  del.onclick = () => wrapper.remove();
-
-  wrapper.appendChild(nameInput);
-  wrapper.appendChild(noteInput);
-  wrapper.appendChild(del);
-
-  document.getElementById("charList").appendChild(wrapper);
+  document.getElementById("charList").appendChild(div);
 }
 
 function initCharacters(chars = []) {
-  const list = document.getElementById("charList");
-  list.innerHTML = "";
+  document.getElementById("charList").innerHTML = "";
 
   if (!chars.length) {
     addCharacter();
@@ -138,7 +123,8 @@ function getCharacters() {
         name: inputs[0].value.trim(),
         note: inputs[1].value.trim()
       };
-    }).filter(c => c.name);
+    })
+    .filter(c => c.name);
 }
 
 /* =========================
@@ -163,7 +149,7 @@ function goHome() {
 }
 
 /* =========================
-   保存（Firestore同期）
+   保存
 ========================= */
 
 async function savePlot() {
@@ -176,7 +162,7 @@ async function savePlot() {
 
   let plots = JSON.parse(localStorage.getItem("plots") || "[]");
 
-  const now = new Date().toLocaleString();
+  const now = new Date().toISOString();
 
   const data = {
     title,
@@ -189,22 +175,21 @@ async function savePlot() {
     data.createdAt = now;
     plots.push(data);
   } else {
-    plots[currentIndex] = { ...plots[currentIndex], ...data };
+    plots[currentIndex] = data;
   }
 
   localStorage.setItem("plots", JSON.stringify(plots));
 
-  // 🔥 Firestore保存
   await fb.setDoc(fb.doc(fb.db, "users", uid), {
-    data: plots,
-    updatedAt: new Date().toISOString()
+    plots,
+    updatedAt: now
   });
 
   alert("保存＆同期完了");
 }
 
 /* =========================
-   読み込み（重要）
+   読み込み
 ========================= */
 
 async function loadFromFirebase() {
@@ -213,11 +198,8 @@ async function loadFromFirebase() {
   const snap = await fb.getDoc(fb.doc(fb.db, "users", uid));
 
   if (snap.exists()) {
-    const data = snap.data().data;
-
-    if (Array.isArray(data)) {
-      localStorage.setItem("plots", JSON.stringify(data));
-    }
+    const data = snap.data().plots || [];
+    localStorage.setItem("plots", JSON.stringify(data));
   }
 }
 
@@ -281,7 +263,7 @@ function openPlot(i) {
 }
 
 /* =========================
-   削除（ローカル＋同期）
+   削除
 ========================= */
 
 async function deletePlot(i) {
@@ -290,11 +272,12 @@ async function deletePlot(i) {
   if (!confirm("削除しますか？")) return;
 
   plots.splice(i, 1);
+
   localStorage.setItem("plots", JSON.stringify(plots));
 
   if (uid) {
     await fb.setDoc(fb.doc(fb.db, "users", uid), {
-      data: plots,
+      plots,
       updatedAt: new Date().toISOString()
     });
   }
@@ -303,7 +286,7 @@ async function deletePlot(i) {
 }
 
 /* =========================
-   セリフ補助（そのまま）
+   セリフ補助
 ========================= */
 
 document.getElementById("text").addEventListener("keydown", function (e) {
@@ -315,29 +298,27 @@ document.getElementById("text").addEventListener("keydown", function (e) {
   const before = value.slice(0, pos);
   const after = value.slice(pos);
 
-  const lastLine = before.split("\n").pop().trim();
+  const last = before.split("\n").pop().trim();
 
-  if (!/^[１-９]$/.test(lastLine)) return;
+  if (!/^[１-９]$/.test(last)) return;
 
   e.preventDefault();
 
-  const num = "１２３４５６７８９".indexOf(lastLine);
+  const num = "１２３４５６７８９".indexOf(last);
   const chars = getCharacters();
-  const char = chars[num];
+  const c = chars[num];
 
-  let insert = char?.name ? char.name + "「」" : "「」";
+  const insert = c?.name ? c.name + "「」" : "「」";
 
-  const newValue = before.slice(0, -1) + insert + after;
-
-  this.value = newValue;
-
-  const newPos = (before.length - 1) + insert.length - 1;
+  this.value = before.slice(0, -1) + insert + after;
 
   setTimeout(() => {
-    this.setSelectionRange(newPos, newPos);
+    this.setSelectionRange(
+      before.length - 1 + insert.length - 1,
+      before.length - 1 + insert.length - 1
+    );
   }, 0);
 });
-
 </script>
 
 <!-- =========================
@@ -346,12 +327,8 @@ document.getElementById("text").addEventListener("keydown", function (e) {
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-app.js";
 import { getFirestore, doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-firestore.js";
-import {
-  getAuth,
-  GoogleAuthProvider,
-  signInWithPopup,
-  onAuthStateChanged
-} from "https://www.gstatic.com/firebasejs/12.12.1/firebase-auth.js";
+import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-auth.js";
+import { onSnapshot } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-firestore.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyAEK7RHuthKhJLXbgQX02ecRqEStf9fn3o",
@@ -369,8 +346,8 @@ const provider = new GoogleAuthProvider();
 
 window.fb = { db, doc, getDoc, setDoc };
 
-/* ログイン */
-window.login = async function () {
+/* login */
+window.login = async () => {
   const res = await signInWithPopup(auth, provider);
   uid = res.user.uid;
 
@@ -380,32 +357,28 @@ window.login = async function () {
   await loadFromFirebase();
 };
 
-/* ログイン状態監視（重要） */
+/* auth監視 */
 onAuthStateChanged(auth, async (user) => {
-  if (user) {
-    uid = user.uid;
+  if (!user) return;
 
-    document.getElementById("userInfo").innerText =
-      "ログイン中: " + user.displayName;
+  uid = user.uid;
 
-    await loadFromFirebase();
+  document.getElementById("userInfo").innerText =
+    "ログイン中: " + user.displayName;
 
-    // 🔥リアルタイム同期ここ
-    onSnapshot(doc(db, "users", uid), (snap) => {
-      if (snap.exists()) {
-        const data = snap.data().data;
+  await loadFromFirebase();
 
-        localStorage.setItem("plots", JSON.stringify(data));
+  onSnapshot(doc(db, "users", uid), (snap) => {
+    if (!snap.exists()) return;
 
-        // 画面更新（今開いてる画面に応じて）
-        if (!document.getElementById("list").classList.contains("hidden")) {
-          showList();
-        }
-      }
-    });
-  }
+    const data = snap.data().plots || [];
+    localStorage.setItem("plots", JSON.stringify(data));
+
+    if (!document.getElementById("list").classList.contains("hidden")) {
+      showList();
+    }
+  });
 });
-
 </script>
 
 </body>
