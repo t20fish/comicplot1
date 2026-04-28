@@ -204,6 +204,8 @@ async function savePlot() {
       createdAt: now,
       updatedAt: now
     });
+
+     editId = newId; 
   } else {
     plots = plots.map(p =>
       p.id === editId
