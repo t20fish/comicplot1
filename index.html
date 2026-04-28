@@ -1,3 +1,4 @@
+現在アプリを作っている。プロット入力欄で、改行したら次の行に「」を自動でうってほしい。カーソルは「の左。コードは以下です。
 <!DOCTYPE html>
 <html lang="ja">
 <head>
@@ -154,31 +155,6 @@ function goHome() {
   document.getElementById("home").classList.remove("hidden");
 }
 
-/* 🔥 ここが今回追加した処理 */
-document.addEventListener("DOMContentLoaded", () => {
-  const textarea = document.getElementById("text");
-
-  textarea.addEventListener("keydown", function(e) {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-
-      const start = this.selectionStart;
-      const end = this.selectionEnd;
-      const value = this.value;
-
-      const insert = "\n「」";
-
-      this.value =
-        value.substring(0, start) +
-        insert +
-        value.substring(end);
-
-      const newPos = start + 2;
-      this.setSelectionRange(newPos, newPos);
-    }
-  });
-});
-
 /* 保存 */
 async function savePlot() {
   if (!uid) return alert("ログインしてください");
@@ -228,7 +204,7 @@ async function loadFromFirebase() {
   if (snap.exists()) {
     const data = snap.data().plots || [];
     localStorage.setItem("plots", JSON.stringify(data));
-    migrateData();
+    migrateData(); // 🔥ここ重要
   }
 }
 
@@ -242,7 +218,7 @@ function showList() {
   plots.sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
 
   plots.forEach(p => {
-    if (!p.id) return;
+    if (!p.id) return; // 🔥保険
 
     const div = document.createElement("div");
     div.className = "card";
@@ -315,11 +291,57 @@ async function deletePlot(id) {
 
 /* 初期化 */
 window.addEventListener("load", migrateData);
+
 </script>
 
-<!-- Firebase（そのまま） -->
+<!-- Firebase -->
 <script type="module">
-/* 省略（元コードそのまま） */
+import { initializeApp } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-app.js";
+import { getFirestore, doc, getDoc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-firestore.js";
+import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-auth.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyAEK7RHuthKhJLXbgQX02ecRqEStf9fn3o",
+  authDomain: "comicplot-c793e.firebaseapp.com",
+  projectId: "comicplot-c793e",
+  storageBucket: "comicplot-c793e.appspot.com",
+  messagingSenderId: "533792573192",
+  appId: "1:533792573192:web:d262cf785b0877df4d0ebd"
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+const auth = getAuth(app);
+const provider = new GoogleAuthProvider();
+
+window.fb = { db, doc, getDoc, setDoc };
+
+window.login = async () => {
+  try {
+    await signInWithPopup(auth, provider);
+  } catch (e) {
+    alert("ログイン失敗: " + e.message);
+  }
+};
+
+onAuthStateChanged(auth, async (user) => {
+  if (!user) return;
+
+  uid = user.uid;
+
+  document.getElementById("userInfo").innerText =
+    "ログイン中: " + user.displayName;
+
+  await loadFromFirebase();
+
+  onSnapshot(doc(db, "users", uid), (snap) => {
+    if (!snap.exists()) return;
+
+    const data = snap.data().plots || [];
+    localStorage.setItem("plots", JSON.stringify(data));
+    migrateData(); // 🔥ここも重要
+  });
+});
 </script>
 
 </body>
